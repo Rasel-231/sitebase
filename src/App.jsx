@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inbox, ArrowUpRight } from "lucide-react";
-import { getProjects, createProject, updateProject, deleteProject } from "./api";
+import { getProjects, createProject, updateProject, deleteProject, verifyAdmin } from "./api";
 import { useToast } from "./context/ToastContext";
 import Background from "./components/Background";
 import Navbar from "./components/Navbar";
 import StatsHeader from "./components/StatsHeader";
 import ProjectCard from "./components/ProjectCard";
 import ProjectModal from "./components/ProjectModal";
+import AdminGateModal from "./components/AdminGateModal";
 import SkeletonCard from "./components/SkeletonCard";
 
 const initialForm = { title: "", description: "", liveUrl: "", image: "" };
@@ -20,6 +21,8 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [adminGate, setAdminGate] = useState(null);
+  const adminIdRef = useRef(null);
   const lastDeleted = useRef(null);
   const gridRef = useRef(null);
 
@@ -49,7 +52,7 @@ export default function App() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const openEdit = (project) => {
+  const openEditModal = (project) => {
     setEditing(project);
     setForm({
       title: project.title,
@@ -58,6 +61,23 @@ export default function App() {
       image: project.image || "",
     });
     setModalOpen(true);
+  };
+
+  const requestEdit = (project) => setAdminGate({ mode: "edit", project });
+
+  const requestDelete = (project) => setAdminGate({ mode: "delete", project });
+
+  const handleAdminSubmit = async (adminId) => {
+    const gate = adminGate;
+    if (!gate) return;
+    await verifyAdmin(adminId);
+    adminIdRef.current = adminId;
+    setAdminGate(null);
+    if (gate.mode === "edit") {
+      openEditModal(gate.project);
+    } else {
+      await handleDelete(gate.project);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -74,8 +94,9 @@ export default function App() {
     }
     try {
       setSubmitting(true);
+      const adminId = adminIdRef.current;
       if (editing) {
-        const res = await updateProject(editing._id, payload);
+        const res = await updateProject(editing._id, payload, adminId);
         setProjects((prev) => prev.map((p) => (p._id === editing._id ? res.data : p)));
         toast.success("Project updated", `${res.data.title} was updated.`);
       } else {
@@ -87,13 +108,14 @@ export default function App() {
     } catch (err) {
       toast.error("Save failed", err.message);
     } finally {
+      adminIdRef.current = null;
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (project) => {
     try {
-      await deleteProject(project._id);
+      await deleteProject(project._id, adminIdRef.current);
       lastDeleted.current = project;
       setProjects((prev) => prev.filter((p) => p._id !== project._id));
       toast.success("Project deleted", `${project.title} was removed.`, {
@@ -120,6 +142,8 @@ export default function App() {
       });
     } catch (err) {
       toast.error("Delete failed", err.message);
+    } finally {
+      adminIdRef.current = null;
     }
   };
 
@@ -201,8 +225,8 @@ export default function App() {
                     <ProjectCard
                       project={project}
                       index={i}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
+                      onEdit={requestEdit}
+                      onDelete={requestDelete}
                     />
                   </motion.div>
                 ))}
@@ -226,6 +250,14 @@ export default function App() {
         onChange={handleChange}
         onSubmit={handleSubmit}
         onClose={() => !submitting && setModalOpen(false)}
+      />
+
+      <AdminGateModal
+        open={adminGate !== null}
+        mode={adminGate?.mode}
+        projectTitle={adminGate?.project?.title}
+        onSubmit={handleAdminSubmit}
+        onClose={() => setAdminGate(null)}
       />
     </div>
   );

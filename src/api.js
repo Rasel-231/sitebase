@@ -22,7 +22,11 @@ API.interceptors.response.use(
 
 export const getProjects = () => API.get("/projects");
 export const createProject = (data) => API.post("/projects", data);
-export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
-export const deleteProject = (id) => API.delete(`/projects/${id}`);
+export const verifyAdmin = (adminId) =>
+  API.post("/admin/verify", null, { headers: { "X-Admin-ID": adminId } });
+export const updateProject = (id, data, adminId) =>
+  API.put(`/projects/${id}`, data, { headers: { "X-Admin-ID": adminId } });
+export const deleteProject = (id, adminId) =>
+  API.delete(`/projects/${id}`, { headers: { "X-Admin-ID": adminId } });
 
 export default API;
